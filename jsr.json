@@ -1,0 +1,9 @@
+{
+  "name": "@ramplex/workflow",
+  "version": "1.0.1",
+  "exports": "./src/index.ts",
+  "publish": {
+    "include": ["LICENSE", "README.md", "src/**/*.ts"],
+    "exclude": [".husky/", "examples/", "src/**/*.test.ts"]
+  }
+}

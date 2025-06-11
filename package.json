@@ -1,7 +1,7 @@
 {
   "name": "@ramplex/workflow",
   "author": "Rami Pellumbi",
-  "description": "Schedule interdependent tasks on a cron-like schedule with parallel task execution. Built in distributed locking to prevent overlapping executions in a clustered environment.",
+  "description": "TypeScript workflow engine for orchestrating dependent tasks with parallel execution, retry policies, and event emission",
   "keywords": [
     "workflow-orchestration",
     "job-automation",
@@ -13,7 +13,6 @@
     "javascript",
     "topological-sort",
     "single-execution",
-    "cluster-safe",
     "sync-jobs",
     "async-jobs",
     "task-dependencies"
