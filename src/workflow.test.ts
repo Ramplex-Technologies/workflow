@@ -2,7 +2,7 @@
 
   MIT License
 
-  Copyright (c) 2025 Rami Pellumbi
+  Copyright (c) 2025 Ramplex Technologies LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -766,6 +766,160 @@ describe("WorkflowRunner - Complex Scenarios", () => {
             expect(errors).toHaveLength(1);
             expect((errors[0] as NodeError).id).toBe("node1");
         });
+
+        test("enabled callback evaluates context at runtime", async () => {
+            const executionOrder: string[] = [];
+            const workflow = new Workflow()
+                .addNode({
+                    id: "configNode",
+                    execute: () => {
+                        executionOrder.push("configNode");
+                        return { threshold: 5 };
+                    },
+                })
+                .addNode({
+                    id: "dataNode",
+                    execute: () => {
+                        executionOrder.push("dataNode");
+                        return 10;
+                    },
+                })
+                .addNode({
+                    id: "conditionalNode",
+                    dependencies: ["configNode", "dataNode"],
+                    enabled: (ctx) => {
+                        // Enable only if dataNode value exceeds threshold
+                        return ctx.dataNode > ctx.configNode.threshold;
+                    },
+                    execute: (ctx) => {
+                        executionOrder.push("conditionalNode");
+                        return `Data ${ctx.dataNode} exceeds threshold ${ctx.configNode.threshold}`;
+                    },
+                })
+                .build();
+
+            const result = await workflow.trigger();
+            expect(executionOrder).toEqual(["configNode", "dataNode", "conditionalNode"]);
+            expect(result.conditionalNode).toBe("Data 10 exceeds threshold 5");
+        });
+
+        test("enabled callback prevents execution when returns false", async () => {
+            const executionOrder: string[] = [];
+            const workflow = new Workflow()
+                .addNode({
+                    id: "configNode",
+                    execute: () => {
+                        executionOrder.push("configNode");
+                        return { threshold: 15 };
+                    },
+                })
+                .addNode({
+                    id: "dataNode",
+                    execute: () => {
+                        executionOrder.push("dataNode");
+                        return 10;
+                    },
+                })
+                .addNode({
+                    id: "conditionalNode",
+                    dependencies: ["configNode", "dataNode"],
+                    enabled: (ctx) => {
+                        return ctx.dataNode > ctx.configNode.threshold;
+                    },
+                    execute: (_ctx) => {
+                        executionOrder.push("conditionalNode");
+                        return "Should not execute";
+                    },
+                })
+                .addNode({
+                    id: "dependentNode",
+                    dependencies: ["conditionalNode"],
+                    execute: () => {
+                        executionOrder.push("dependentNode");
+                        return "Also should not execute";
+                    },
+                })
+                .build();
+
+            const result = await workflow.trigger();
+            expect(executionOrder).toEqual(["configNode", "dataNode"]);
+            expect(result.conditionalNode).toBeUndefined();
+            expect(result.dependentNode).toBeUndefined();
+        });
+
+        test("enabled callback with initial context", async () => {
+            const executionOrder: string[] = [];
+            const workflow = new Workflow({
+                contextValue: { enableProcessing: true },
+            })
+                .addNode({
+                    id: "node1",
+                    enabled: (ctx) => ctx.initial.enableProcessing,
+                    execute: () => {
+                        executionOrder.push("node1");
+                        return "result1";
+                    },
+                })
+                .addNode({
+                    id: "node2",
+                    enabled: (ctx) => !ctx.initial.enableProcessing,
+                    execute: () => {
+                        executionOrder.push("node2");
+                        return "result2";
+                    },
+                })
+                .build();
+
+            const result = await workflow.trigger();
+            expect(executionOrder).toEqual(["node1"]);
+            expect(result.node1).toBe("result1");
+            expect(result.node2).toBeUndefined();
+        });
+
+        test("multiple enabled callbacks in parallel branches", async () => {
+            const executionOrder: string[] = [];
+            const workflow = new Workflow()
+                .addNode({
+                    id: "root",
+                    execute: () => {
+                        executionOrder.push("root");
+                        return { enableBranch1: true, enableBranch2: false };
+                    },
+                })
+                .addNode({
+                    id: "branch1",
+                    dependencies: ["root"],
+                    enabled: (ctx) => ctx.root.enableBranch1,
+                    execute: () => {
+                        executionOrder.push("branch1");
+                        return "branch1-result";
+                    },
+                })
+                .addNode({
+                    id: "branch2",
+                    dependencies: ["root"],
+                    enabled: (ctx) => ctx.root.enableBranch2,
+                    execute: () => {
+                        executionOrder.push("branch2");
+                        return "branch2-result";
+                    },
+                })
+                .addNode({
+                    id: "merger",
+                    dependencies: ["branch1", "branch2"],
+                    execute: (ctx) => {
+                        executionOrder.push("merger");
+                        return { branch1: ctx.branch1, branch2: ctx.branch2 };
+                    },
+                })
+                .build();
+
+            const result = await workflow.trigger();
+            expect(executionOrder).toEqual(["root", "branch1"]);
+            expect(result.branch1).toBe("branch1-result");
+            expect(result.branch2).toBeUndefined();
+            expect(result.merger).toBeUndefined();
+        });
     });
 
     describe("printWorkflow Mermaid output", () => {
@@ -853,6 +1007,31 @@ describe("WorkflowRunner - Complex Scenarios", () => {
             expect(output).toContain("node_with_dash --> final_node");
             expect(output).toContain("node_with_dots --> final_node");
             expect(output).toContain("node_with_symbols --> final_node");
+        });
+
+        test("workflow with conditional nodes in mermaid output", () => {
+            const runner = new Workflow()
+                .addNode({ id: "always", execute: () => "always" })
+                .addNode({ id: "never", enabled: false, execute: () => "never" })
+                .addNode({
+                    id: "conditional",
+                    enabled: (_ctx) => true,
+                    execute: () => "conditional",
+                })
+                .addNode({
+                    id: "depends-on-conditional",
+                    dependencies: ["conditional"],
+                    execute: () => "depends",
+                })
+                .build();
+
+            const output = runner.printWorkflow();
+            expect(output).toContain('always["always"]');
+            expect(output).toContain('never["never (Disabled)"]');
+            expect(output).toContain('conditional["conditional (Conditional)"]');
+            expect(output).toContain('depends_on_conditional["depends-on-conditional"]');
+            expect(output).toContain("style never fill:#ccc,stroke:#999,color:#666");
+            expect(output).toContain("style conditional fill:#ffd,stroke:#cc9,color:#660");
         });
 
         test("workflow with multiple root nodes", () => {

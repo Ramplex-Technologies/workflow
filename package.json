@@ -31,7 +31,7 @@
     "dist",
     "package.json"
   ],
-  "packageManager": "pnpm@10.11.1",
+  "packageManager": "pnpm@10.12.1",
   "exports": {
     ".": {
       "require": "./dist/index.js",
@@ -49,7 +49,6 @@
     "test": "vitest",
     "prepare": "husky"
   },
-  "dependencies": {},
   "devDependencies": {
     "@biomejs/biome": "2.0.0-beta.6",
     "@types/node": "^22.15.29",

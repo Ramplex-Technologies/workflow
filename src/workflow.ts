@@ -2,7 +2,7 @@
 
   MIT License
 
-  Copyright (c) 2025 Rami Pellumbi
+  Copyright (c) 2025 Ramplex Technologies LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -276,7 +276,8 @@ export class WorkflowRunner<TInitialNodeContext, TNodeContext extends Record<str
                 if (!node) {
                     throw new Error(`Node ${nodeId} not found`);
                 }
-                return node.isEnabled && this.#nodeDependencies.get(nodeId).length === 0;
+                const hasNoDeps = this.#nodeDependencies.get(nodeId).length === 0;
+                return hasNoDeps && node.isEnabled(this.#context.value, true);
             }),
         );
 
@@ -339,14 +340,14 @@ export class WorkflowRunner<TInitialNodeContext, TNodeContext extends Record<str
                 for (const [id, n] of this.#nodes) {
                     if (!completed.has(id) && !running.has(id)) {
                         const canRun =
-                            n.isEnabled &&
+                            n.isEnabled(this.#context.value) &&
                             this.#nodeDependencies.get(n.id).every((depId) => {
                                 const depNode = this.#nodes.get(depId);
                                 return (
                                     depNode &&
                                     completed.has(depId) &&
                                     depNode.status === "completed" &&
-                                    depNode.isEnabled
+                                    depNode.isEnabled(this.#context.value, true)
                                 );
                             });
                         if (canRun) {
@@ -420,7 +421,14 @@ export class WorkflowRunner<TInitialNodeContext, TNodeContext extends Record<str
             if (!node) {
                 return nodeId;
             }
-            return node.isEnabled ? nodeId : `${nodeId} (Disabled)`;
+            const enabledType = node.enabledType;
+            if (enabledType === "disabled") {
+                return `${nodeId} (Disabled)`;
+            }
+            if (enabledType === "conditional") {
+                return `${nodeId} (Conditional)`;
+            }
+            return nodeId;
         };
 
         // Collect all edges
@@ -431,9 +439,11 @@ export class WorkflowRunner<TInitialNodeContext, TNodeContext extends Record<str
             // Add node definition
             output.push(`    ${sanitizedNodeId}["${nodeLabel}"]`);
 
-            // Style disabled nodes
-            if (!node.isEnabled) {
+            // Style disabled or conditional nodes
+            if (node.enabledType === "disabled") {
                 output.push(`    style ${sanitizedNodeId} fill:#ccc,stroke:#999,color:#666`);
+            } else if (node.enabledType === "conditional") {
+                output.push(`    style ${sanitizedNodeId} fill:#ffd,stroke:#cc9,color:#660`);
             }
 
             const dependencies = this.#nodeDependencies.get(nodeId);

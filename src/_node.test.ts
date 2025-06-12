@@ -2,7 +2,7 @@
 
   MIT License
 
-  Copyright (c) 2025 Rami Pellumbi
+  Copyright (c) 2025 Ramplex Technologies LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -144,7 +144,7 @@ describe("Node Class", () => {
                 execute: async () => "result",
             });
 
-            expect(node.isEnabled).toBe(true);
+            expect(node.isEnabled()).toBe(true);
         });
 
         test("node respects explicit enabled flag", () => {
@@ -160,8 +160,8 @@ describe("Node Class", () => {
                 enabled: false,
             });
 
-            expect(enabledNode.isEnabled).toBe(true);
-            expect(disabledNode.isEnabled).toBe(false);
+            expect(enabledNode.isEnabled()).toBe(true);
+            expect(disabledNode.isEnabled()).toBe(false);
         });
 
         test("disabled node skips execution and returns null", async () => {
@@ -258,6 +258,78 @@ describe("Node Class", () => {
 
             expect(result).toBe("result");
             expect(node.status).toBe("completed");
+        });
+
+        test("enabled callback receives context and returns true", async () => {
+            let callbackContext: Record<string, unknown> = {};
+            const node = new Node({
+                id: "enabled-callback-node",
+                execute: async (ctx) => {
+                    return `processed: ${ctx.initial}`;
+                },
+                enabled: (ctx) => {
+                    callbackContext = ctx;
+                    return true;
+                },
+            });
+
+            const result = await node.run({ initial: "test-value" });
+
+            expect(callbackContext).toEqual({ initial: "test-value" });
+            expect(result).toBe("processed: test-value");
+            expect(node.status).toBe("completed");
+        });
+
+        test("enabled callback receives context and returns false", async () => {
+            let callbackCalled = false;
+            let executeCalled = false;
+            const node = new Node({
+                id: "disabled-callback-node",
+                execute: async () => {
+                    executeCalled = true;
+                    return "should not execute";
+                },
+                enabled: (_ctx) => {
+                    callbackCalled = true;
+                    return false;
+                },
+            });
+
+            const result = await node.run({ initial: "test-value" });
+
+            expect(callbackCalled).toBe(true);
+            expect(executeCalled).toBe(false);
+            expect(result).toBeNull();
+            expect(node.status).toBe("skipped");
+        });
+
+        test("enabledType getter returns correct values", () => {
+            const defaultNode = new Node({
+                id: "default-node",
+                execute: async () => "result",
+            });
+            expect(defaultNode.enabledType).toBe("enabled");
+
+            const enabledNode = new Node({
+                id: "enabled-node",
+                execute: async () => "result",
+                enabled: true,
+            });
+            expect(enabledNode.enabledType).toBe("enabled");
+
+            const disabledNode = new Node({
+                id: "disabled-node",
+                execute: async () => "result",
+                enabled: false,
+            });
+            expect(disabledNode.enabledType).toBe("disabled");
+
+            const conditionalNode = new Node({
+                id: "conditional-node",
+                execute: async () => "result",
+                enabled: (_ctx) => true,
+            });
+            expect(conditionalNode.enabledType).toBe("conditional");
         });
 
         test("disabled node in retry scenario", async () => {

@@ -2,7 +2,7 @@
 
   MIT License
 
-  Copyright (c) 2025 Rami Pellumbi
+  Copyright (c) 2025 Ramplex Technologies LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -74,7 +74,7 @@ export type NodeOptions<
      * The dependencies of the node.
      */
     dependencies?: readonly TPossibleNodeDependencyId[];
-    enabled?: boolean;
+    enabled?: boolean | ((ctx: TInput) => boolean);
     /**
      * The retry policy for the node.
      *
@@ -147,9 +147,48 @@ export class Node<
 
     /**
      * Return whether this node is enabled or not
+     * @param ctx - The node context, required when enabled is a function
+     * @param skipCallbackIfMissingDeps - If true and enabled is a callback, returns true if dependencies are not yet in context
      */
-    get isEnabled(): boolean {
-        return this.#options.enabled === undefined || this.#options.enabled;
+    isEnabled(ctx?: TNodeContext, skipCallbackIfMissingDeps = false): boolean {
+        if (this.#options.enabled === undefined) {
+            return true;
+        }
+        if (typeof this.#options.enabled === "boolean") {
+            return this.#options.enabled;
+        }
+        if (!ctx) {
+            throw new Error(`Context is required to evaluate enabled function for node ${this.#options.id}`);
+        }
+
+        // If skipCallbackIfMissingDeps is true, check if all dependencies are in context
+        if (skipCallbackIfMissingDeps && this.#options.dependencies) {
+            for (const dep of this.#options.dependencies) {
+                if (!(dep in ctx)) {
+                    // Dependencies not yet available, assume enabled for now
+                    return true;
+                }
+            }
+        }
+
+        const contextToPass = ctx as [TPossibleNodeDependencyId] extends [never]
+            ? TNodeContext
+            : ContextWithDependencies<TNodeContext, TPossibleNodeDependencyId>;
+        return this.#options.enabled(contextToPass);
+    }
+
+    /**
+     * Gets the enabled state type for display purposes
+     * @returns 'enabled' | 'disabled' | 'conditional'
+     */
+    get enabledType(): "enabled" | "disabled" | "conditional" {
+        if (this.#options.enabled === undefined || this.#options.enabled === true) {
+            return "enabled";
+        }
+        if (this.#options.enabled === false) {
+            return "disabled";
+        }
+        return "conditional";
     }
 
     /**
@@ -171,7 +210,7 @@ export class Node<
      * @throws {Error} If the node execution fails after all retry attempts
      */
     async run(ctx: TNodeContext): Promise<TNodeReturn | null> {
-        if (!this.isEnabled) {
+        if (!this.isEnabled(ctx)) {
             this.#status = "skipped";
             return null;
         }
