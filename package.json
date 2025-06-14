@@ -47,7 +47,9 @@
     "format": "biome format --write ./src",
     "lint": "biome check --write ./src",
     "test": "vitest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "publish:npm": "pnpm build && npm publish",
+    "publish:jsr": "pnpm build && npx jsr publish"
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.0-beta.6",
